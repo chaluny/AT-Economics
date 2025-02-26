@@ -94,8 +94,8 @@
             info.update = function(props) {
                 this._div.innerHTML = '<h4>UK MSOA Data</h4>' + 
                     (props ? 
-                    '<b>' + props.name + '</b><br />' + 
-                    'Code: ' + props.code + '<br />' +
+                    '<b>' + (props.name || 'Unnamed Area') + '</b><br />' + 
+                    'Code: ' + (props.code || 'No code') + '<br />' +
                     currentDataLayer + ': ' + (props[currentDataLayer] || 'N/A')
                     : 'Hover over an area');
             };
@@ -136,8 +136,11 @@
         }
 
         function style(feature) {
+            // Get the value or default to 0
+            const value = feature.properties[currentDataLayer] || 0;
+            
             return {
-                fillColor: getColor(feature.properties[currentDataLayer] || 0),
+                fillColor: getColor(value),
                 weight: 1,
                 opacity: 1,
                 color: 'white',
@@ -181,9 +184,7 @@
                 map.removeLayer(currentGeoJson);
             }
 
-            // Try loading a simpler test file first to verify the setup works
-            // Comment this line and uncomment the next one after testing
-            // const dataUrl = 'data/test.json';
+            // Path to your actual GeoJSON file
             const dataUrl = 'data/MSOA.json';
             
             // Show loading indicator
@@ -208,19 +209,46 @@
                     console.log("Data loaded successfully, features:", data?.features?.length || "unknown structure");
                     // Process property names to ensure consistency
                     // Adjust this according to your actual GeoJSON structure
-                    data.features.forEach(feature => {
-                        // If your GeoJSON doesn't have these properties, add defaults
-                        if (!feature.properties.name && feature.properties.MSOA11NM) {
-                            feature.properties.name = feature.properties.MSOA11NM;
-                        }
-                        if (!feature.properties.code && feature.properties.MSOA11CD) {
-                            feature.properties.code = feature.properties.MSOA11CD;
-                        }
-                        // Add placeholder data if needed
-                        if (!feature.properties[currentDataLayer]) {
-                            feature.properties[currentDataLayer] = Math.floor(Math.random() * 100);
-                        }
-                    });
+                    if (data.features && data.features.length > 0) {
+                        console.log("Sample feature properties:", data.features[0].properties);
+                        
+                        // Try to identify property field names for MSOA codes/names
+                        const sampleProps = data.features[0].properties;
+                        const likelyCodeFields = Object.keys(sampleProps).filter(key => 
+                            key.toLowerCase().includes('code') || 
+                            key.toLowerCase().includes('cd') ||
+                            key.toLowerCase().includes('id')
+                        );
+                        const likelyNameFields = Object.keys(sampleProps).filter(key => 
+                            key.toLowerCase().includes('name') || 
+                            key.toLowerCase().includes('nm') ||
+                            key.toLowerCase().includes('label')
+                        );
+                        
+                        console.log("Likely code fields:", likelyCodeFields);
+                        console.log("Likely name fields:", likelyNameFields);
+                        
+                        // Map appropriate properties
+                        const codeField = likelyCodeFields[0] || '';
+                        const nameField = likelyNameFields[0] || '';
+                        
+                        data.features.forEach(feature => {
+                            // Map the existing properties to the expected properties
+                            if (codeField && !feature.properties.code) {
+                                feature.properties.code = feature.properties[codeField];
+                            }
+                            if (nameField && !feature.properties.name) {
+                                feature.properties.name = feature.properties[nameField];
+                            }
+                            
+                            // Add placeholder data if needed
+                            if (!feature.properties[currentDataLayer]) {
+                                feature.properties[currentDataLayer] = Math.floor(Math.random() * 100);
+                            }
+                        });
+                    } else {
+                        console.error("No features found in the GeoJSON data");
+                    }
                     
                     // Add the GeoJSON to the map
                     currentGeoJson = L.geoJson(data, {
@@ -228,8 +256,18 @@
                         onEachFeature: onEachFeature
                     }).addTo(map);
                     
-                    // Fit map to bounds of the data
-                    map.fitBounds(currentGeoJson.getBounds());
+                    // Add debugging for bounds
+                    const bounds = currentGeoJson.getBounds();
+                    console.log("GeoJSON bounds:", bounds);
+                    
+                    // Check if bounds are valid before fitting
+                    if (bounds.isValid()) {
+                        map.fitBounds(bounds);
+                    } else {
+                        console.error("Invalid bounds:", bounds);
+                        // Default to UK view
+                        map.setView([53.0, -1.5], 6);
+                    }
 
                     // Create controls if they don't exist
                     if (!info) {

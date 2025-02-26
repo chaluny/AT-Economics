@@ -56,16 +56,6 @@
 <body>
     <div id="map"></div>
     <div class="controls">
-        <h3>Area Type</h3>
-        <div>
-            <input type="radio" id="msoa" name="areaType" value="msoa" checked>
-            <label for="msoa">MSOA</label>
-        </div>
-        <div>
-            <input type="radio" id="lsoa" name="areaType" value="lsoa">
-            <label for="lsoa">LSOA</label>
-        </div>
-        <hr>
         <h3>Data Layer</h3>
         <select id="dataLayer">
             <option value="population">Population</option>
@@ -88,7 +78,7 @@
 
         // Variables to store current state
         let currentGeoJson;
-        let currentAreaType = 'msoa';
+        const currentAreaType = 'msoa'; // Fixed as MSOA only
         let currentDataLayer = 'population';
         let info;
         let legend;
@@ -192,7 +182,7 @@
             }
 
             // Path to your actual GeoJSON file
-            const dataUrl = `data/MSOA.json`;
+            const dataUrl = `data/${currentAreaType}.geojson`;
             
             // Show loading indicator
             document.body.style.cursor = 'wait';
@@ -250,14 +240,7 @@
                 });
         }
 
-        // Set up event listeners
-        document.querySelectorAll('input[name="areaType"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                currentAreaType = this.value;
-                loadAreaData();
-            });
-        });
-
+        // Set up event listener for data layer selection
         document.getElementById('dataLayer').addEventListener('change', function() {
             currentDataLayer = this.value;
             loadAreaData();

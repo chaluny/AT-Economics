@@ -181,21 +181,31 @@
                 map.removeLayer(currentGeoJson);
             }
 
-            // Path to your actual GeoJSON file - update this with your exact file path
-            const dataUrl = 'data/msoa.json';
+            // Try loading a simpler test file first to verify the setup works
+            // Comment this line and uncomment the next one after testing
+            const dataUrl = 'data/test.geojson';
+            // const dataUrl = 'data/msoa.geojson';
             
             // Show loading indicator
             document.body.style.cursor = 'wait';
             
+            console.log("Attempting to load data from:", dataUrl);
+            
             // Fetch the GeoJSON file
             fetch(dataUrl)
                 .then(response => {
+                    console.log("Fetch response status:", response.status);
+                    console.log("Fetch response headers:", [...response.headers]);
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
                     }
-                    return response.json();
+                    return response.json().catch(err => {
+                        console.error("JSON parsing error:", err);
+                        throw new Error("Failed to parse the response as JSON. The file might not be valid JSON.");
+                    });
                 })
                 .then(data => {
+                    console.log("Data loaded successfully, features:", data?.features?.length || "unknown structure");
                     // Process property names to ensure consistency
                     // Adjust this according to your actual GeoJSON structure
                     data.features.forEach(feature => {
@@ -235,7 +245,36 @@
                 })
                 .catch(error => {
                     console.error('Error loading GeoJSON:', error);
-                    alert(`Failed to load ${currentAreaType} data. Please check the console for details.`);
+                    
+                    // Create a more detailed error message for debugging
+                    const errorDisplay = document.createElement('div');
+                    errorDisplay.style.position = 'absolute';
+                    errorDisplay.style.top = '10px';
+                    errorDisplay.style.left = '50%';
+                    errorDisplay.style.transform = 'translateX(-50%)';
+                    errorDisplay.style.backgroundColor = 'white';
+                    errorDisplay.style.padding = '20px';
+                    errorDisplay.style.border = '2px solid red';
+                    errorDisplay.style.zIndex = '1000';
+                    errorDisplay.style.maxWidth = '80%';
+                    errorDisplay.innerHTML = `
+                        <h3>Error Loading MSOA Data</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p><strong>File path:</strong> ${dataUrl}</p>
+                        <p>Please check:</p>
+                        <ul>
+                            <li>The file exists at the specified path</li>
+                            <li>The file is valid GeoJSON</li>
+                            <li>Your browser console for more details (Press F12)</li>
+                        </ul>
+                        <button id="closeError" style="padding: 5px 10px; margin-top: 10px;">Close</button>
+                    `;
+                    document.body.appendChild(errorDisplay);
+                    
+                    document.getElementById('closeError').addEventListener('click', function() {
+                        errorDisplay.remove();
+                    });
+                    
                     document.body.style.cursor = 'default';
                 });
         }

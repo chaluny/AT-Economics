@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UK MSOA/LSOA Data Explorer</title>
+    <title>UK MSOA Data Explorer</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -92,7 +92,7 @@
                 return this._div;
             };
             info.update = function(props) {
-                this._div.innerHTML = '<h4>UK Area Data</h4>' + 
+                this._div.innerHTML = '<h4>UK MSOA Data</h4>' + 
                     (props ? 
                     '<b>' + props.name + '</b><br />' + 
                     'Code: ' + props.code + '<br />' +

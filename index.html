@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK MSOA/LSOA Data Explorer</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="controls">
+        <h3>Area Type</h3>
+        <div>
+            <input type="radio" id="msoa" name="areaType" value="msoa" checked>
+            <label for="msoa">MSOA</label>
+        </div>
+        <div>
+            <input type="radio" id="lsoa" name="areaType" value="lsoa">
+            <label for="lsoa">LSOA</label>
+        </div>
+        <hr>
+        <h3>Data Layer</h3>
+        <select id="dataLayer">
+            <option value="population">Population</option>
+            <option value="activity">Physical Activity</option>
+            <!-- Add more data layers as needed -->
+        </select>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <script>
+        // Initialize map centered on UK
+        const map = L.map('map').setView([54.5, -3.5], 6);
+
+        // Add OpenStreetMap base layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Variables to store current state
+        let currentGeoJson;
+        let currentAreaType = 'msoa';
+        let currentDataLayer = 'population';
+        let info;
+        let legend;
+
+        // Info control
+        function createInfoControl() {
+            info = L.control();
+            info.onAdd = function() {
+                this._div = L.DomUtil.create('div', 'info');
+                this.update();
+                return this._div;
+            };
+            info.update = function(props) {
+                this._div.innerHTML = '<h4>UK Area Data</h4>' + 
+                    (props ? 
+                    '<b>' + props.name + '</b><br />' + 
+                    'Code: ' + props.code + '<br />' +
+                    currentDataLayer + ': ' + (props[currentDataLayer] || 'N/A')
+                    : 'Hover over an area');
+            };
+            info.addTo(map);
+        }
+        
+        // Legend control
+        function createLegend(grades, colorFunction) {
+            if (legend) {
+                legend.remove();
+            }
+            
+            legend = L.control({position: 'bottomright'});
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'info legend');
+                
+                // Generate legend based on data layer
+                for (let i = 0; i < grades.length; i++) {
+                    div.innerHTML +=
+                        '<i style="background:' + colorFunction(grades[i] + 1) + '"></i> ' +
+                        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+                }
+                return div;
+            };
+            legend.addTo(map);
+        }
+
+        // Style and color functions
+        function getColor(d) {
+            // This is a placeholder color scale - adjust based on your data
+            return d > 1000 ? '#800026' :
+                   d > 500  ? '#BD0026' :
+                   d > 200  ? '#E31A1C' :
+                   d > 100  ? '#FC4E2A' :
+                   d > 50   ? '#FD8D3C' :
+                   d > 20   ? '#FEB24C' :
+                   d > 10   ? '#FED976' : '#FFEDA0';
+        }
+
+        function style(feature) {
+            return {
+                fillColor: getColor(feature.properties[currentDataLayer] || 0),
+                weight: 1,
+                opacity: 1,
+                color: 'white',
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        // Interaction functions
+        function highlightFeature(e) {
+            const layer = e.target;
+            layer.setStyle({
+                weight: 3,
+                color: '#666',
+                dashArray: '',
+                fillOpacity: 0.7
+            });
+            layer.bringToFront();
+            info.update(layer.feature.properties);
+        }
+
+        function resetHighlight(e) {
+            currentGeoJson.resetStyle(e.target);
+            info.update();
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight,
+                click: function(e) {
+                    map.fitBounds(e.target.getBounds());
+                }
+            });
+        }
+
+        // Load data function
+        function loadAreaData() {
+            // Clear existing layers
+            if (currentGeoJson) {
+                map.removeLayer(currentGeoJson);
+            }
+
+            // This would be your actual data file path
+            const dataUrl = `data/${currentAreaType}.geojson`;
+            
+            // For demonstration purposes, we'll simulate loading data
+            // In a real implementation, you'd use fetch() to load your actual GeoJSON
+            simulateDataLoading();
+        }
+
+        // For demonstration only - replace with actual data loading
+        function simulateDataLoading() {
+            // Create a basic polygon for demonstration
+            const demoData = {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {
+                            "name": "Sample MSOA",
+                            "code": "E02000001",
+                            "population": 7500,
+                            "activity": 45
+                        },
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[
+                                [-3, 54], [-2, 54], [-2, 55], [-3, 55], [-3, 54]
+                            ]]
+                        }
+                    }
+                ]
+            };
+            
+            // Add the GeoJSON to the map
+            currentGeoJson = L.geoJson(demoData, {
+                style: style,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Create controls if they don't exist
+            if (!info) {
+                createInfoControl();
+            }
+            
+            // Update legend
+            createLegend([0, 10, 20, 50, 100, 200, 500, 1000], getColor);
+        }
+
+        // Set up event listeners
+        document.querySelectorAll('input[name="areaType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                currentAreaType = this.value;
+                loadAreaData();
+            });
+        });
+
+        document.getElementById('dataLayer').addEventListener('change', function() {
+            currentDataLayer = this.value;
+            loadAreaData();
+        });
+
+        // Initial data load
+        loadAreaData();
+    </script>
+</body>
+</html>

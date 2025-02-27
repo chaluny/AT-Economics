@@ -131,10 +131,7 @@
             <div class="controls">
                 <h3>Data Layer</h3>
                 <select id="dataLayer">
-                    <option value="inactivity" selected>Inactivity Level</option>
-                    <option value="activity">Physical Activity</option>
-                    <option value="population">Population</option>
-                    <!-- Add more data layers as needed -->
+                    <option value="inactivity" selected>Inactivity Level (Ages 35-54)</option>
                 </select>
             </div>
             
@@ -205,7 +202,7 @@
                 
                 // Add no data entry
                 div.innerHTML = 
-                    '<i style="background:#cccccc"></i> No data<br>';
+                    '<i style="background:#cccccc; opacity: 0.2;"></i> No data<br>';
                 
                 // Generate legend based on data layer
                 for (let i = 0; i < grades.length; i++) {
@@ -220,44 +217,34 @@
 
         // Style and color functions
         function getColor(d) {
-            // Choose color scheme based on data layer
-            if (currentDataLayer === 'population') {
-                return d > 3000 ? '#800026' :
-                       d > 2500 ? '#BD0026' :
-                       d > 2000 ? '#E31A1C' :
-                       d > 1500 ? '#FC4E2A' :
-                       d > 1000 ? '#FD8D3C' :
-                       d > 500  ? '#FEB24C' :
-                       d > 250  ? '#FED976' : '#FFEDA0';
-            } 
-            else if (currentDataLayer === 'inactivity') {
-                // Red color scheme for inactivity - darker red means more inactive
-                return d > 50 ? '#67000d' :
-                       d > 45 ? '#a50f15' :
-                       d > 40 ? '#cb181d' :
-                       d > 35 ? '#ef3b2c' :
-                       d > 30 ? '#fb6a4a' :
-                       d > 25 ? '#fc9272' :
-                       d > 20 ? '#fcbba1' : '#fee5d9';
-            }
-            else {
-                // Activity - higher is better, use green for high values
-                return d > 80 ? '#005a32' :
-                       d > 70 ? '#238b45' :
-                       d > 60 ? '#41ab5d' :
-                       d > 50 ? '#74c476' :
-                       d > 40 ? '#a1d99b' :
-                       d > 30 ? '#c7e9c0' :
-                       d > 20 ? '#e5f5e0' : '#f7fcf5';
-            }
+            // Red color scheme for inactivity - darker red means more inactive
+            return d > 50 ? '#67000d' :
+                   d > 45 ? '#a50f15' :
+                   d > 40 ? '#cb181d' :
+                   d > 35 ? '#ef3b2c' :
+                   d > 30 ? '#fb6a4a' :
+                   d > 25 ? '#fc9272' :
+                   d > 20 ? '#fcbba1' : '#fee5d9';
         }
 
         function style(feature) {
+            // Check if the property exists at all
+            if (!feature.properties.hasOwnProperty(currentDataLayer)) {
+                return {
+                    fillColor: '#cccccc', // Gray for no data
+                    weight: 0.5,
+                    opacity: 0.3,
+                    color: '#999999',
+                    dashArray: '3',
+                    fillOpacity: 0.1  // Very low opacity for areas with no data
+                };
+            }
+            
             // Get the value for the current data layer
             const value = feature.properties[currentDataLayer];
             
-            // If no value, use a neutral color with lower opacity
-            if (value === null || value === undefined) {
+            // If value is null, undefined, or NaN, use gray style
+            if (value === null || value === undefined || isNaN(value)) {
                 return {
                     fillColor: '#cccccc', // Gray for no data
                     weight: 0.5,
@@ -331,15 +318,7 @@
                 </div>
                 <div class="data-row">
                     <span class="data-label">Inactivity (Ages 35-54):</span>
-                    <span>${props.inactivity !== undefined && props.inactivity !== null ? props.inactivity + '%' : 'No data'}</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Activity:</span>
-                    <span>${props.activity !== undefined && props.activity !== null ? props.activity + '%' : 'No data'}</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Population:</span>
-                    <span>${props.population !== undefined && props.population !== null ? props.population.toLocaleString() : 'No data'}</span>
+                    <span>${props.inactivity !== undefined ? props.inactivity + '%' : 'No data'}</span>
                 </div>
             `;
             
@@ -354,7 +333,7 @@
             }
 
             // Path to your actual GeoJSON file - using your specific filename
-            const dataUrl = 'data/LSOA_WGS (1).json';
+            const dataUrl = 'data/LSOA_WGS (1).geojson';
             
             // Show loading indicator
             document.body.style.cursor = 'wait';

@@ -388,7 +388,7 @@
                                         } else {
                                             // Default values if no match
                                             if (!feature.properties.inactivity) {
-                                                feature.properties.inactivity = Math.floor(Math.random() * 60) + 10; // Random between 10-70%
+                                                feature.properties.inactivity = 0; // Make zero
                                             }
                                             if (!feature.properties.activity) {
                                                 feature.properties.activity = 100 - feature.properties.inactivity;

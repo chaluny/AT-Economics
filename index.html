@@ -175,17 +175,25 @@
                 return this._div;
             };
             info.update = function(props) {
-                this._div.innerHTML = '<h4>UK LSOA Data</h4>' + 
-                    (props ? 
-                    '<b>' + (props.name || 'Unnamed Area') + '</b><br />' + 
-                    currentDataLayer + ': ' + (props[currentDataLayer] || 'N/A') + 
-                    (currentDataLayer === 'inactivity' ? '%' : '')
-                    : 'Hover over an area');
+                this._div.innerHTML = '<h4>UK LSOA Data</h4>';
+                
+                if (props) {
+                    const value = props[currentDataLayer];
+                    const displayValue = value !== null && value !== undefined ? 
+                        value + (currentDataLayer === 'inactivity' ? '%' : '') : 
+                        'No data';
+                    
+                    this._div.innerHTML += 
+                        '<b>' + (props.name || 'Unnamed Area') + '</b><br />' + 
+                        currentDataLayer + ': ' + displayValue;
+                } else {
+                    this._div.innerHTML += 'Hover over an area';
+                }
             };
             info.addTo(map);
         }
         
-        // Legend control
+        // Create custom legend with "No data" entry
         function createLegend(grades, colorFunction) {
             if (legend) {
                 legend.remove();
@@ -194,6 +202,10 @@
             legend = L.control({position: 'bottomright'});
             legend.onAdd = function() {
                 const div = L.DomUtil.create('div', 'info legend');
+                
+                // Add no data entry
+                div.innerHTML = 
+                    '<i style="background:#cccccc"></i> No data<br>';
                 
                 // Generate legend based on data layer
                 for (let i = 0; i < grades.length; i++) {
@@ -241,8 +253,20 @@
         }
 
         function style(feature) {
-            // Get the value or default to 0
-            const value = feature.properties[currentDataLayer] || 0;
+            // Get the value or default to null
+            const value = feature.properties[currentDataLayer];
+            
+            // If no value, use a neutral color
+            if (value === null || value === undefined) {
+                return {
+                    fillColor: '#cccccc', // Gray for no data
+                    weight: 1,
+                    opacity: 0.5,
+                    color: 'white',
+                    dashArray: '3',
+                    fillOpacity: 0.3
+                };
+            }
             
             return {
                 fillColor: getColor(value),
@@ -306,16 +330,16 @@
                     <span>${code}</span>
                 </div>
                 <div class="data-row">
-                    <span class="data-label">Inactivity:</span>
-                    <span>${props.inactivity !== undefined ? props.inactivity + '%' : 'N/A'}</span>
+                    <span class="data-label">Inactivity (Ages 35-54):</span>
+                    <span>${props.inactivity !== undefined && props.inactivity !== null ? props.inactivity + '%' : 'No data'}</span>
                 </div>
                 <div class="data-row">
                     <span class="data-label">Activity:</span>
-                    <span>${props.activity !== undefined ? props.activity + '%' : 'N/A'}</span>
+                    <span>${props.activity !== undefined && props.activity !== null ? props.activity + '%' : 'No data'}</span>
                 </div>
                 <div class="data-row">
                     <span class="data-label">Population:</span>
-                    <span>${props.population !== undefined ? props.population.toLocaleString() : 'N/A'}</span>
+                    <span>${props.population !== undefined && props.population !== null ? props.population.toLocaleString() : 'No data'}</span>
                 </div>
             `;
             
@@ -329,8 +353,8 @@
                 map.removeLayer(currentGeoJson);
             }
 
-            // Path to your actual GeoJSON file - LSOA boundaries
-            const dataUrl = 'data/LSOA_WGS (1).json';
+            // Path to your actual GeoJSON file - using your specific filename
+            const dataUrl = 'data/LSOA_WGS (1).geojson';
             
             // Show loading indicator
             document.body.style.cursor = 'wait';
@@ -386,19 +410,12 @@
                                             feature.properties.inactivity = inactivityByLsoa[lsoaCode];
                                             feature.properties.activity = 100 - inactivityByLsoa[lsoaCode]; // Convert inactivity to activity
                                         } else {
-                                            // Default values if no match
-                                            if (!feature.properties.inactivity) {
-                                                feature.properties.inactivity = 0; // Make zero
-                                            }
-                                            if (!feature.properties.activity) {
-                                                feature.properties.activity = 100 - feature.properties.inactivity;
-                                            }
+                                            // Leave empty if no match (no random values)
+                                            feature.properties.inactivity = null;
+                                            feature.properties.activity = null;
                                         }
                                         
-                                        // Ensure population data exists (random if not available)
-                                        if (!feature.properties.population) {
-                                            feature.properties.population = Math.floor(Math.random() * 3000) + 1000;
-                                        }
+                                        // Population can still be null - no random values
                                         
                                         // Make sure we have a name and code property for display
                                         if (!feature.properties.name && feature.properties.LSOA21NM) {
@@ -483,19 +500,25 @@
                                     
                                     // Update legend based on your data range
                                     // Get actual min/max values from your data
-                                    let values = data.features.map(f => f.properties[currentDataLayer]).filter(v => v !== undefined);
-                                    let min = Math.min(...values);
-                                    let max = Math.max(...values);
+                                    let values = data.features.map(f => f.properties[currentDataLayer]).filter(v => v !== undefined && v !== null);
                                     
-                                    // Create more appropriate legend steps
-                                    let range = max - min;
-                                    let step = Math.round(range / 6);
-                                    let legendValues = [min];
-                                    for (let i = 1; i < 6; i++) {
-                                        legendValues.push(min + step * i);
+                                    if (values.length > 0) {
+                                        let min = Math.min(...values);
+                                        let max = Math.max(...values);
+                                        
+                                        // Create more appropriate legend steps
+                                        let range = max - min;
+                                        let step = Math.round(range / 6);
+                                        let legendValues = [min];
+                                        for (let i = 1; i < 6; i++) {
+                                            legendValues.push(min + step * i);
+                                        }
+                                        
+                                        createLegend(legendValues, getColor);
+                                    } else {
+                                        // Fallback legend if no values are found
+                                        createLegend([0, 10, 20, 30, 40, 50], getColor);
                                     }
-                                    
-                                    createLegend(legendValues, getColor);
                                     
                                     // Reset cursor
                                     document.body.style.cursor = 'default';

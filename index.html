@@ -253,18 +253,18 @@
         }
 
         function style(feature) {
-            // Get the value or default to null
+            // Get the value for the current data layer
             const value = feature.properties[currentDataLayer];
             
-            // If no value, use a neutral color
+            // If no value, use a neutral color with lower opacity
             if (value === null || value === undefined) {
                 return {
                     fillColor: '#cccccc', // Gray for no data
-                    weight: 1,
-                    opacity: 0.5,
-                    color: 'white',
+                    weight: 0.5,
+                    opacity: 0.3,
+                    color: '#999999',
                     dashArray: '3',
-                    fillOpacity: 0.3
+                    fillOpacity: 0.1  // Very low opacity for areas with no data
                 };
             }
             
@@ -354,7 +354,7 @@
             }
 
             // Path to your actual GeoJSON file - using your specific filename
-            const dataUrl = 'data/LSOA_WGS (1).json';
+            const dataUrl = 'data/LSOA_WGS (1).geojson';
             
             // Show loading indicator
             document.body.style.cursor = 'wait';
@@ -528,12 +528,11 @@
                         .catch(error => {
                             console.error("Error loading CSV:", error);
                             
-                            // Fallback to using GeoJSON without CSV data
+                            // Ensure all features have null values when CSV fails to load
                             data.features.forEach(feature => {
-                                // Add placeholder data if needed
-                                if (!feature.properties[currentDataLayer]) {
-                                    feature.properties[currentDataLayer] = Math.floor(Math.random() * 100);
-                                }
+                                feature.properties.inactivity = null;
+                                feature.properties.activity = null;
+                                feature.properties.population = null;
                             });
                             
                             // Continue with map rendering

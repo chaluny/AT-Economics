@@ -92,6 +92,12 @@
             padding: 8px 0;
             border-bottom: 1px solid #f0f0f0;
         }
+        .debugging {
+            background-color: #fff3cd;
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
         .data-label {
             font-weight: bold;
             color: #555;
@@ -116,6 +122,21 @@
         }
         button:hover {
             background-color: #2980b9;
+        }
+        .report-btn {
+            background-color: #f39c12;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .report-btn:hover {
+            background-color: #e67e22;
+        }
+        .debug-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3cd;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
     </style>
 </head>
@@ -290,6 +311,15 @@
                 click: function(e) {
                     // Update the sidebar with selected area info
                     updateSelectedAreaInfo(feature.properties);
+                    
+                    // DEBUG: Log detailed information about this feature
+                    console.log("CLICKED AREA DEBUG INFO:");
+                    console.log("- LSOA Code:", feature.properties.LSOA21CD || feature.properties.code || "MISSING");
+                    console.log("- Name:", feature.properties.name || feature.properties.LSOA21NM || "UNNAMED");
+                    console.log("- Has inactivity property:", 'inactivity' in feature.properties);
+                    console.log("- Inactivity value:", feature.properties.inactivity);
+                    console.log("- All properties:", feature.properties);
+                    
                     // Zoom to the selected area
                     map.fitBounds(e.target.getBounds());
                 }

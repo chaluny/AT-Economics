@@ -402,7 +402,7 @@
                                     results.data.forEach(row => {
                                         // Use your specific field names
                                         const lsoaCode = row.LSOA_code;
-                                        const inactivityValue = parseFloat(row.Aged_35_54);
+                                        const inactivityValue = parseFloat(row.Aged_35_54) * 100;
                                         
                                         if (lsoaCode && !isNaN(inactivityValue)) {
                                             inactivityByLsoa[lsoaCode] = inactivityValue;

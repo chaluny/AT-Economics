@@ -1,4 +1,17 @@
-<!DOCTYPE html>
+<div class="controls">
+                <h3>Filter by Inactivity Level</h3>
+                <select id="filterRange">
+                    <option value="all" selected>Show All</option>
+                    <option value="0-20">0-20%</option>
+                    <option value="20-25">20-25%</option>
+                    <option value="25-30">25-30%</option>
+                    <option value="30-35">30-35%</option>
+                    <option value="35-40">35-40%</option>
+                    <option value="40-45">40-45%</option>
+                    <option value="45-50">45-50%</option>
+                    <option value="50+">50% and above</option>
+                </select>
+            </div><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -72,6 +85,24 @@
         }
         .controls {
             margin-bottom: 20px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #2c3e50;
+        }
+        .controls select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            background-color: white;
+            font-size: 14px;
         }
         .area-info {
             margin-top: 20px;

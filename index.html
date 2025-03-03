@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UK LSOA Data Explorer</title>
+    <title>UK LSOA Inactivity Data Explorer</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -92,70 +92,40 @@
             padding: 8px 0;
             border-bottom: 1px solid #f0f0f0;
         }
-        .debugging {
-            background-color: #fff3cd;
-            padding: 5px;
-            margin: 2px 0;
-            border-radius: 3px;
-        }
         .data-label {
             font-weight: bold;
             color: #555;
         }
-        select, button {
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            background-color: white;
-            font-size: 14px;
-            margin-top: 5px;
+        .data-value {
+            text-align: right;
         }
-        select:focus, button:focus {
-            outline: none;
-            border-color: #3498db;
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            text-align: center;
         }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .report-btn {
-            background-color: #f39c12;
-            width: 100%;
-            margin-top: 10px;
-        }
-        .report-btn:hover {
-            background-color: #e67e22;
-        }
-        .debug-panel {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #fff3cd;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>UK LSOA Data Explorer</h1>
+        <h1>UK LSOA Inactivity Data Explorer</h1>
     </div>
     <div class="container">
         <div class="map-container">
             <div id="map"></div>
+            <div id="loading">Loading data, please wait...</div>
         </div>
         <div class="sidebar">
-            <div class="controls">
-                <h3>Data Layer</h3>
-                <select id="dataLayer">
-                    <option value="inactivity" selected>Inactivity Level (Ages 35-54)</option>
-                </select>
-            </div>
-            
             <div class="area-info">
                 <h3>Area Information</h3>
                 <div id="selected-area">
@@ -169,456 +139,285 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     
     <script>
-        // Initialize map centered on UK
+        // Initialize map
         const map = L.map('map').setView([53.0, -1.5], 6);
-
+        
         // Add OpenStreetMap base layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Variables to store current state
-        let currentGeoJson;
-        const currentAreaType = 'lsoa'; // Changed from MSOA to LSOA
-        let currentDataLayer = 'inactivity'; // Set default to inactivity
-        let info;
-        let legend;
+        // Global variables
+        let lsoaLayer = null;
+        let infoControl = null;
+        let legendControl = null;
+        let loadedData = {
+            boundaries: null,
+            inactivity: {}
+        };
 
-        // Info control
-        function createInfoControl() {
-            info = L.control({position: 'bottomleft'});
-            info.onAdd = function() {
-                this._div = L.DomUtil.create('div', 'info');
-                this.update();
-                return this._div;
-            };
-            info.update = function(props) {
-                this._div.innerHTML = '<h4>UK LSOA Data</h4>';
-                
-                if (props) {
-                    const value = props[currentDataLayer];
-                    const displayValue = value !== null && value !== undefined ? 
-                        value + (currentDataLayer === 'inactivity' ? '%' : '') : 
-                        'No data';
-                    
-                    this._div.innerHTML += 
-                        '<b>' + (props.name || 'Unnamed Area') + '</b><br />' + 
-                        currentDataLayer + ': ' + displayValue;
-                } else {
-                    this._div.innerHTML += 'Hover over an area';
+        // Show loading indicator
+        document.getElementById('loading').classList.remove('hidden');
+
+        // Function to load data
+        async function loadData() {
+            try {
+                // Load JSON boundary file
+                const responseJSON = await fetch('data/LSOA_WGS (1).json');
+                if (!responseJSON.ok) {
+                    throw new Error('Failed to load LSOA boundaries');
                 }
-            };
-            info.addTo(map);
-        }
-        
-        // Create custom legend with "No data" entry
-        function createLegend(grades, colorFunction) {
-            if (legend) {
-                legend.remove();
-            }
-            
-            legend = L.control({position: 'bottomright'});
-            legend.onAdd = function() {
-                const div = L.DomUtil.create('div', 'info legend');
-                
-                // Add no data entry
-                div.innerHTML = 
-                    '<i style="background:#cccccc; opacity: 0.2;"></i> No data<br>';
-                
-                // Generate legend based on data layer
-                for (let i = 0; i < grades.length; i++) {
-                    div.innerHTML +=
-                        '<i style="background:' + colorFunction(grades[i] + 1) + '"></i> ' +
-                        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+                loadedData.boundaries = await responseJSON.json();
+                console.log(`Loaded ${loadedData.boundaries.features.length} LSOA boundaries`);
+
+                // Load CSV inactivity data
+                const responseCSV = await fetch('data/Inactive.csv');
+                if (!responseCSV.ok) {
+                    throw new Error('Failed to load inactivity data');
                 }
-                return div;
-            };
-            legend.addTo(map);
-        }
-
-        // Style and color functions
-        function getColor(d) {
-            // Red color scheme for inactivity - darker red means more inactive
-            return d > 50 ? '#67000d' :
-                   d > 45 ? '#a50f15' :
-                   d > 40 ? '#cb181d' :
-                   d > 35 ? '#ef3b2c' :
-                   d > 30 ? '#fb6a4a' :
-                   d > 25 ? '#fc9272' :
-                   d > 20 ? '#fcbba1' : '#fee5d9';
-        }
-
-        function style(feature) {
-            // Check if the property exists at all
-            if (!feature.properties.hasOwnProperty(currentDataLayer)) {
-                return {
-                    fillColor: '#cccccc', // Gray for no data
-                    weight: 0.5,
-                    opacity: 0.3,
-                    color: '#999999',
-                    dashArray: '3',
-                    fillOpacity: 0.1  // Very low opacity for areas with no data
-                };
-            }
-            
-            // Get the value for the current data layer
-            const value = feature.properties[currentDataLayer];
-            
-            // If value is null, undefined, or NaN, use gray style
-            if (value === null || value === undefined || isNaN(value)) {
-                return {
-                    fillColor: '#cccccc', // Gray for no data
-                    weight: 0.5,
-                    opacity: 0.3,
-                    color: '#999999',
-                    dashArray: '3',
-                    fillOpacity: 0.1  // Very low opacity for areas with no data
-                };
-            }
-            
-            return {
-                fillColor: getColor(value),
-                weight: 1,
-                opacity: 1,
-                color: 'white',
-                dashArray: '3',
-                fillOpacity: 0.7
-            };
-        }
-
-        // Interaction functions
-        function highlightFeature(e) {
-            const layer = e.target;
-            layer.setStyle({
-                weight: 3,
-                color: '#666',
-                dashArray: '',
-                fillOpacity: 0.7
-            });
-            layer.bringToFront();
-            info.update(layer.feature.properties);
-        }
-
-        function resetHighlight(e) {
-            currentGeoJson.resetStyle(e.target);
-            info.update();
-        }
-
-        function onEachFeature(feature, layer) {
-            layer.on({
-                mouseover: highlightFeature,
-                mouseout: resetHighlight,
-                click: function(e) {
-                    // Update the sidebar with selected area info
-                    updateSelectedAreaInfo(feature.properties);
-                    
-                    // DEBUG: Log detailed information about this feature
-                    console.log("CLICKED AREA DEBUG INFO:");
-                    console.log("- LSOA Code:", feature.properties.LSOA21CD || feature.properties.code || "MISSING");
-                    console.log("- Name:", feature.properties.name || feature.properties.LSOA21NM || "UNNAMED");
-                    console.log("- Has inactivity property:", 'inactivity' in feature.properties);
-                    console.log("- Inactivity value:", feature.properties.inactivity);
-                    console.log("- All properties:", feature.properties);
-                    
-                    // Zoom to the selected area
-                    map.fitBounds(e.target.getBounds());
-                }
-            });
-        }
-        
-        // Function to update the sidebar with area information
-        function updateSelectedAreaInfo(props) {
-            const areaInfoDiv = document.getElementById('selected-area');
-            if (!props) {
-                areaInfoDiv.innerHTML = '<p>No area selected. Click on an area to view its details.</p>';
-                return;
-            }
-            
-            const name = props.name || 'Unnamed Area';
-            const code = props.code || 'No code';
-            
-                const html = `
-                <div class="data-row">
-                    <span class="data-label">Name:</span>
-                    <span>${name}</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Code:</span>
-                    <span>${code}</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Inactivity (Ages 35-54):</span>
-                    <span>${props.inactivity !== undefined ? props.inactivity + '%' : 'No data'}</span>
-                </div>
-            `;
-            
-            areaInfoDiv.innerHTML = html;
-        }
-
-        // Load data function
-        function loadAreaData() {
-            // Clear existing layers
-            if (currentGeoJson) {
-                map.removeLayer(currentGeoJson);
-            }
-
-            // Path to your actual JSON file - using your specific filename
-            const dataUrl = 'data/LSOA_WGS (1).json';
-            
-            // Show loading indicator
-            document.body.style.cursor = 'wait';
-            
-            console.log("Attempting to load data from:", dataUrl);
-            
-            // Fetch the GeoJSON file
-            fetch(dataUrl)
-                .then(response => {
-                    console.log("Fetch response status:", response.status);
-                    console.log("Fetch response headers:", [...response.headers]);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json().catch(err => {
-                        console.error("JSON parsing error:", err);
-                        throw new Error("Failed to parse the response as JSON. The file might not be valid JSON.");
-                    });
-                })
-                .then(data => {
-                    console.log("Data loaded successfully, features:", data?.features?.length || "unknown structure");
-                    
-                    // Load CSV data and join with GeoJSON
-                    fetch('data/Inactive.csv')
-                        .then(response => response.text())
-                        .then(csvText => {
-                            // Parse CSV
-                            Papa.parse(csvText, {
-                                header: true,
-                                skipEmptyLines: true,
-                                complete: function(results) {
-                                    console.log("CSV data loaded:", results.data.length, "rows");
-                                    
-                                    // Create lookup object from CSV data
-                                    const inactivityByLsoa = {};
-                                    results.data.forEach(row => {
-                                        // Use your specific field names
-                                        const lsoaCode = row.LSOA_code;
-                                        const inactivityValue = parseFloat(row.Aged_35_54);
-                                        
-                                        if (lsoaCode && !isNaN(inactivityValue)) {
-                                            inactivityByLsoa[lsoaCode] = inactivityValue;
-                                        }
-                                    });
-                                    
-                                    // Join data with GeoJSON
-                                    data.features.forEach(feature => {
-                                        // Get LSOA code from the LSOA21CD field
-                                        const lsoaCode = feature.properties.LSOA21CD;
-                                        
-                                        // Add inactivity data if available
-                                        if (lsoaCode && inactivityByLsoa[lsoaCode] !== undefined) {
-                                            feature.properties.inactivity = inactivityByLsoa[lsoaCode];
-                                            feature.properties.activity = 100 - inactivityByLsoa[lsoaCode]; // Convert inactivity to activity
-                                        } else {
-                                            // Leave empty if no match (no random values)
-                                            feature.properties.inactivity = null;
-                                            feature.properties.activity = null;
-                                        }
-                                        
-                                        // Population can still be null - no random values
-                                        
-                                        // Make sure we have a name and code property for display
-                                        if (!feature.properties.name && feature.properties.LSOA21NM) {
-                                            feature.properties.name = feature.properties.LSOA21NM;
-                                        }
-                                        if (!feature.properties.code && feature.properties.LSOA21CD) {
-                                            feature.properties.code = feature.properties.LSOA21CD;
-                                        }
-                                    });
-                                    
-                                    // After joining data, add to map
-                                    currentGeoJson = L.geoJson(data, {
-                                        style: style,
-                                        onEachFeature: onEachFeature
-                                    }).addTo(map);
-                    // Process property names to ensure consistency
-                    // Adjust this according to your actual GeoJSON structure
-                    if (data.features && data.features.length > 0) {
-                        console.log("Sample feature properties:", data.features[0].properties);
+                const csvText = await responseCSV.text();
+                
+                // Parse CSV with PapaParse
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        console.log(`Loaded ${results.data.length} rows of inactivity data`);
+                        console.log('CSV headers:', results.meta.fields);
                         
-                        // Try to identify property field names for MSOA codes/names
-                        const sampleProps = data.features[0].properties;
-                        const likelyCodeFields = Object.keys(sampleProps).filter(key => 
-                            key.toLowerCase().includes('code') || 
-                            key.toLowerCase().includes('cd') ||
-                            key.toLowerCase().includes('id')
-                        );
-                        const likelyNameFields = Object.keys(sampleProps).filter(key => 
-                            key.toLowerCase().includes('name') || 
-                            key.toLowerCase().includes('nm') ||
-                            key.toLowerCase().includes('label')
-                        );
-                        
-                        console.log("Likely code fields:", likelyCodeFields);
-                        console.log("Likely name fields:", likelyNameFields);
-                        
-                        // Map appropriate properties
-                        const codeField = likelyCodeFields[0] || '';
-                        const nameField = likelyNameFields[0] || '';
-                        
-                        data.features.forEach(feature => {
-                            // Map the existing properties to the expected properties
-                            if (codeField && !feature.properties.code) {
-                                feature.properties.code = feature.properties[codeField];
-                            }
-                            if (nameField && !feature.properties.name) {
-                                feature.properties.name = feature.properties[nameField];
-                            }
+                        // Process CSV data into a lookup object
+                        results.data.forEach(row => {
+                            const lsoaCode = row.LSOA_code;
+                            const aged35_54 = parseFloat(row.Aged_35_54);
                             
-                            // Add placeholder data if needed
-                            if (!feature.properties[currentDataLayer]) {
-                                feature.properties[currentDataLayer] = Math.floor(Math.random() * 100);
+                            if (lsoaCode && !isNaN(aged35_54)) {
+                                loadedData.inactivity[lsoaCode] = aged35_54;
                             }
                         });
-                    } else {
-                        console.error("No features found in the GeoJSON data");
+                        
+                        console.log(`Created lookup with ${Object.keys(loadedData.inactivity).length} LSOA entries`);
+                        
+                        // Now that both datasets are loaded, create the map
+                        createMap();
+                    },
+                    error: function(error) {
+                        console.error('Error parsing CSV:', error);
+                        document.getElementById('loading').textContent = 'Error loading data. Please check console.';
                     }
-                    
-                    // Add the GeoJSON to the map
-                    currentGeoJson = L.geoJson(data, {
-                        style: style,
-                        onEachFeature: onEachFeature
-                    }).addTo(map);
-                    
-                                    // Add debugging for bounds
-                                    const bounds = currentGeoJson.getBounds();
-                                    console.log("GeoJSON bounds:", bounds);
-                                    
-                                    // Check if bounds are valid before fitting
-                                    if (bounds.isValid()) {
-                                        map.fitBounds(bounds);
-                                    } else {
-                                        console.error("Invalid bounds:", bounds);
-                                        // Default to UK view
-                                        map.setView([53.0, -1.5], 6);
-                                    }
-
-                                    // Create controls if they don't exist
-                                    if (!info) {
-                                        createInfoControl();
-                                    }
-                                    
-                                    // Update legend based on your data range
-                                    // Get actual min/max values from your data
-                                    let values = data.features.map(f => f.properties[currentDataLayer]).filter(v => v !== undefined && v !== null);
-                                    
-                                    if (values.length > 0) {
-                                        let min = Math.min(...values);
-                                        let max = Math.max(...values);
-                                        
-                                        // Create more appropriate legend steps
-                                        let range = max - min;
-                                        let step = Math.round(range / 6);
-                                        let legendValues = [min];
-                                        for (let i = 1; i < 6; i++) {
-                                            legendValues.push(min + step * i);
-                                        }
-                                        
-                                        createLegend(legendValues, getColor);
-                                    } else {
-                                        // Fallback legend if no values are found
-                                        createLegend([0, 10, 20, 30, 40, 50], getColor);
-                                    }
-                                    
-                                    // Reset cursor
-                                    document.body.style.cursor = 'default';
-                                }
-                            });
-                        })
-                        .catch(error => {
-                            console.error("Error loading CSV:", error);
-                            
-                            // Ensure all features have null values when CSV fails to load
-                            data.features.forEach(feature => {
-                                feature.properties.inactivity = null;
-                                feature.properties.activity = null;
-                                feature.properties.population = null;
-                            });
-                            
-                            // Continue with map rendering
-                            currentGeoJson = L.geoJson(data, {
-                                style: style,
-                                onEachFeature: onEachFeature
-                            }).addTo(map);
-                            
-                            // Add debugging for bounds
-                            const bounds = currentGeoJson.getBounds();
-                            console.log("GeoJSON bounds:", bounds);
-                            
-                            // Check if bounds are valid before fitting
-                            if (bounds.isValid()) {
-                                map.fitBounds(bounds);
-                            } else {
-                                console.error("Invalid bounds:", bounds);
-                                // Default to UK view
-                                map.setView([53.0, -1.5], 6);
-                            }
-
-                            // Create controls if they don't exist
-                            if (!info) {
-                                createInfoControl();
-                            }
-                            
-                            // Update legend
-                            createLegend([0, 10, 20, 50, 100, 200, 500, 1000], getColor);
-                            
-                            // Reset cursor
-                            document.body.style.cursor = 'default';
-                        });
-                })
-                .catch(error => {
-                    console.error('Error loading GeoJSON:', error);
-                    
-                    // Create a more detailed error message for debugging
-                    const errorDisplay = document.createElement('div');
-                    errorDisplay.style.position = 'absolute';
-                    errorDisplay.style.top = '10px';
-                    errorDisplay.style.left = '50%';
-                    errorDisplay.style.transform = 'translateX(-50%)';
-                    errorDisplay.style.backgroundColor = 'white';
-                    errorDisplay.style.padding = '20px';
-                    errorDisplay.style.border = '2px solid red';
-                    errorDisplay.style.zIndex = '1000';
-                    errorDisplay.style.maxWidth = '80%';
-                    errorDisplay.innerHTML = `
-                        <h3>Error Loading MSOA Data</h3>
-                        <p><strong>Error:</strong> ${error.message}</p>
-                        <p><strong>File path:</strong> ${dataUrl}</p>
-                        <p>Please check:</p>
-                        <ul>
-                            <li>The file exists at the specified path</li>
-                            <li>The file is valid GeoJSON</li>
-                            <li>Your browser console for more details (Press F12)</li>
-                        </ul>
-                        <button id="closeError" style="padding: 5px 10px; margin-top: 10px;">Close</button>
-                    `;
-                    document.body.appendChild(errorDisplay);
-                    
-                    document.getElementById('closeError').addEventListener('click', function() {
-                        errorDisplay.remove();
-                    });
-                    
-                    document.body.style.cursor = 'default';
                 });
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please check console.';
+            }
         }
 
-        // Set up event listener for data layer selection
-        document.getElementById('dataLayer').addEventListener('change', function() {
-            currentDataLayer = this.value;
-            loadAreaData();
-        });
+        // Function to create and style the map
+        function createMap() {
+            // Define color function for inactivity values
+            function getColor(d) {
+                return d > 50 ? '#67000d' :
+                       d > 45 ? '#a50f15' :
+                       d > 40 ? '#cb181d' :
+                       d > 35 ? '#ef3b2c' :
+                       d > 30 ? '#fb6a4a' :
+                       d > 25 ? '#fc9272' :
+                       d > 20 ? '#fcbba1' : 
+                       d > 0  ? '#fee5d9' :
+                       '#cccccc'; // Default for no data
+            }
 
-        // Initial data load
-        loadAreaData();
-    </script>
-</body>
-</html>
+            // Style function for LSOA areas
+            function style(feature) {
+                // Get the LSOA code
+                const lsoaCode = feature.properties.LSOA21CD;
+                
+                // Skip Welsh areas (codes starting with W)
+                if (lsoaCode && lsoaCode.startsWith('W')) {
+                    return {
+                        fillColor: '#cccccc',
+                        weight: 0.5,
+                        opacity: 0.3,
+                        color: '#999999',
+                        dashArray: '3',
+                        fillOpacity: 0.1
+                    };
+                }
+                
+                // Get inactivity value if available
+                const inactivityValue = lsoaCode ? loadedData.inactivity[lsoaCode] : undefined;
+                
+                // If no data, use light gray
+                if (inactivityValue === undefined) {
+                    return {
+                        fillColor: '#cccccc',
+                        weight: 0.5,
+                        opacity: 0.3,
+                        color: '#999999',
+                        dashArray: '3',
+                        fillOpacity: 0.1
+                    };
+                }
+                
+                // Return style with appropriate color based on value
+                return {
+                    fillColor: getColor(inactivityValue),
+                    weight: 1,
+                    opacity: 1,
+                    color: 'white',
+                    dashArray: '3',
+                    fillOpacity: 0.7
+                };
+            }
+
+            // Mouse event handlers
+            function highlightFeature(e) {
+                const layer = e.target;
+                layer.setStyle({
+                    weight: 3,
+                    color: '#666',
+                    dashArray: '',
+                    fillOpacity: 0.7
+                });
+                layer.bringToFront();
+                updateInfoControl(layer.feature.properties);
+            }
+
+            function resetHighlight(e) {
+                lsoaLayer.resetStyle(e.target);
+                updateInfoControl();
+            }
+
+            function clickFeature(e) {
+                updateSelectedArea(e.target.feature.properties);
+                map.fitBounds(e.target.getBounds());
+            }
+
+            // Add interactions to each feature
+            function onEachFeature(feature, layer) {
+                layer.on({
+                    mouseover: highlightFeature,
+                    mouseout: resetHighlight,
+                    click: clickFeature
+                });
+            }
+
+            // Create info control
+            function createInfoControl() {
+                infoControl = L.control();
+                infoControl.onAdd = function() {
+                    this._div = L.DomUtil.create('div', 'info');
+                    this.update();
+                    return this._div;
+                };
+                infoControl.update = function(props) {
+                    this._div.innerHTML = '<h4>LSOA Inactivity Levels</h4>' + 
+                        (props ? 
+                            '<b>' + (props.LSOA21NM || 'Unnamed Area') + '</b><br />' +
+                            'Inactivity: ' + getInactivityDisplay(props.LSOA21CD) :
+                            'Hover over an area');
+                };
+                infoControl.addTo(map);
+            }
+
+            // Create legend
+            function createLegend() {
+                const legendValues = [0, 20, 25, 30, 35, 40, 45, 50];
+                
+                legendControl = L.control({position: 'bottomright'});
+                legendControl.onAdd = function() {
+                    const div = L.DomUtil.create('div', 'info legend');
+                    
+                    // Add no data entry
+                    div.innerHTML = '<i style="background:#cccccc; opacity: 0.2;"></i> No data<br>';
+                    
+                    // Add colored entries
+                    for (let i = 0; i < legendValues.length; i++) {
+                        div.innerHTML +=
+                            '<i style="background:' + getColor(legendValues[i] + 1) + '"></i> ' +
+                            legendValues[i] + (legendValues[i + 1] ? '&ndash;' + legendValues[i + 1] + '<br>' : '+');
+                    }
+                    return div;
+                };
+                legendControl.addTo(map);
+            }
+
+            // Helper function to get inactivity display text
+            function getInactivityDisplay(lsoaCode) {
+                if (!lsoaCode) return 'No data';
+                if (lsoaCode.startsWith('W')) return 'No data (Welsh area)';
+                
+                const value = loadedData.inactivity[lsoaCode];
+                return value !== undefined ? value + '%' : 'No data';
+            }
+
+            // Helper function to update info control
+            function updateInfoControl(props) {
+                if (infoControl) {
+                    infoControl.update(props);
+                }
+            }
+
+            // Helper function to update selected area info in sidebar
+            function updateSelectedArea(props) {
+                const areaInfoDiv = document.getElementById('selected-area');
+                if (!props) {
+                    areaInfoDiv.innerHTML = '<p>No area selected. Click on an area to view its details.</p>';
+                    return;
+                }
+                
+                const name = props.LSOA21NM || 'Unnamed Area';
+                const code = props.LSOA21CD || 'No code';
+                const inactivityDisplay = getInactivityDisplay(code);
+                
+                const html = `
+                    <div class="data-row">
+                        <span class="data-label">Name:</span>
+                        <span class="data-value">${name}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Code:</span>
+                        <span class="data-value">${code}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Inactivity (Ages 35-54):</span>
+                        <span class="data-value">${inactivityDisplay}</span>
+                    </div>
+                `;
+                
+                areaInfoDiv.innerHTML = html;
+            }
+
+            // Add boundaries to map
+            lsoaLayer = L.geoJson(loadedData.boundaries, {
+                style: style,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Create controls
+            createInfoControl();
+            createLegend();
+            
+            // Count matches for reporting
+            let matchCount = 0;
+            let welshCount = 0;
+            loadedData.boundaries.features.forEach(feature => {
+                const lsoaCode = feature.properties.LSOA21CD;
+                if (lsoaCode) {
+                    if (lsoaCode.startsWith('W')) {
+                        welshCount++;
+                    } else if (loadedData.inactivity[lsoaCode] !== undefined) {
+                        matchCount++;
+                    }
+                }
+            });
+            
+            console.log(`Map created with ${matchCount} areas with data, ${welshCount} Welsh areas excluded`);
+
+            // Hide loading indicator
+            document.getElementById('loading').classList.add('hidden');
+            
+            // Fit map to boundaries
+            map.fitBounds(lsoaLayer.getBounds());
+        }
+
+        // Start

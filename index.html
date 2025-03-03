@@ -191,7 +191,7 @@
                             const aged35_54 = parseFloat(row.Aged_35_54);
                             
                             if (lsoaCode && !isNaN(aged35_54)) {
-                                loadedData.inactivity[lsoaCode] = aged35_54;
+                                loadedData.inactivity[lsoaCode] = aged35_54 * 100;
                             }
                         });
                         

@@ -229,7 +229,7 @@
                 for (let i = 0; i < grades.length; i++) {
                     div.innerHTML +=
                         '<i style="background:' + colorFunction(grades[i] + 1) + '"></i> ' +
-                        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+                        math.round(grades[i]) + math.round((grades[i + 1]) ? '&ndash;' + math.round(grades[i + 1]) + '<br>' : '+');
                 }
                 return div;
             };

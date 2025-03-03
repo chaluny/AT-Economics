@@ -191,7 +191,8 @@
                             const aged35_54 = parseFloat(row.Aged_35_54);
                             
                             if (lsoaCode && !isNaN(aged35_54)) {
-                                loadedData.inactivity[lsoaCode] = aged35_54;
+                                // Multiply by 100 to convert from decimal to percentage
+                                loadedData.inactivity[lsoaCode] = aged35_54 * 100;
                             }
                         });
                         
